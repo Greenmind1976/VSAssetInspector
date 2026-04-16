@@ -3,6 +3,7 @@ set -euo pipefail
 
 ###############################################################################
 # Build + Install VSAssetInspector into Vintage Story 1.22.0-rc.8
+# Present on 1.21 branch for convenience when forward-porting fixes.
 ###############################################################################
 
 MOD_ID="vsassetinspector"

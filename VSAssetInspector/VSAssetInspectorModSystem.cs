@@ -18,6 +18,11 @@ public class VSAssetInspectorModSystem : ModSystem
     {
         WriteIndented = true
     };
+    private static readonly JsonDocumentOptions JsonDocOptions = new()
+    {
+        AllowTrailingCommas = true,
+        CommentHandling = JsonCommentHandling.Skip
+    };
 
     public override void StartServerSide(ICoreServerAPI api)
     {
@@ -129,7 +134,7 @@ public class VSAssetInspectorModSystem : ModSystem
 
         byPlayer.SendMessage(
             groupId,
-            $"[AssetInspector] Validated {report.AssetCount} recipe assets for domain {domain}. Unresolved references: {report.UnresolvedCount}.",
+            $"[AssetInspector] Validated {report.AssetCount} recipe assets for domain {domain}. Unresolved references: {report.UnresolvedCount}. Asset errors: {report.AssetErrorCount}.",
             EnumChatType.Notification
         );
 
@@ -348,6 +353,7 @@ public class VSAssetInspectorModSystem : ModSystem
     private static RecipeValidationReport ValidateRecipeAssets(ICoreAPI api, ValidationRegistry registry, string domain)
     {
         List<RecipeAssetValidation> assets = new();
+        List<RecipeAssetError> assetErrors = new();
         int totalReferences = 0;
         int unresolvedCount = 0;
 
@@ -359,25 +365,36 @@ public class VSAssetInspectorModSystem : ModSystem
                 continue;
             }
 
-            using JsonDocument document = JsonDocument.Parse(data);
-            Dictionary<string, RecipeReferenceCandidate> refs = new(StringComparer.Ordinal);
-            CollectRecipeReferences(document.RootElement, refs);
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(data, JsonDocOptions);
+                Dictionary<string, RecipeReferenceCandidate> refs = new(StringComparer.Ordinal);
+                CollectRecipeReferences(document.RootElement, refs);
 
-            List<RecipeReferenceValidation> validations = refs.Values
-                .OrderBy(value => value.Code, StringComparer.Ordinal)
-                .ThenBy(value => value.DeclaredType, StringComparer.Ordinal)
-                .Select(value => ValidateReference(value, registry))
-                .ToList();
+                List<RecipeReferenceValidation> validations = refs.Values
+                    .OrderBy(value => value.Code, StringComparer.Ordinal)
+                    .ThenBy(value => value.DeclaredType, StringComparer.Ordinal)
+                    .Select(value => ValidateReference(value, registry))
+                    .ToList();
 
-            totalReferences += validations.Count;
-            unresolvedCount += validations.Count(validation => !validation.IsResolved);
+                totalReferences += validations.Count;
+                unresolvedCount += validations.Count(validation => !validation.IsResolved);
 
-            assets.Add(new RecipeAssetValidation(
-                asset.Location.ToString(),
-                validations.Count,
-                validations.Count(validation => !validation.IsResolved),
-                validations
-            ));
+                assets.Add(new RecipeAssetValidation(
+                    asset.Location.ToString(),
+                    validations.Count,
+                    validations.Count(validation => !validation.IsResolved),
+                    validations
+                ));
+            }
+            catch (Exception ex)
+            {
+                assetErrors.Add(new RecipeAssetError(
+                    asset.Location.ToString(),
+                    ex.GetType().Name,
+                    ex.Message
+                ));
+            }
         }
 
         return new RecipeValidationReport(
@@ -386,7 +403,9 @@ public class VSAssetInspectorModSystem : ModSystem
             assets.Count,
             totalReferences,
             unresolvedCount,
-            assets.OrderBy(asset => asset.AssetLocation, StringComparer.Ordinal).ToList()
+            assetErrors.Count,
+            assets.OrderBy(asset => asset.AssetLocation, StringComparer.Ordinal).ToList(),
+            assetErrors.OrderBy(error => error.AssetLocation, StringComparer.Ordinal).ToList()
         );
     }
 
@@ -587,7 +606,9 @@ public class VSAssetInspectorModSystem : ModSystem
         int AssetCount,
         int TotalReferences,
         int UnresolvedCount,
-        List<RecipeAssetValidation> Assets
+        int AssetErrorCount,
+        List<RecipeAssetValidation> Assets,
+        List<RecipeAssetError> AssetErrors
     );
 
     private sealed record RecipeAssetValidation(
@@ -610,6 +631,12 @@ public class VSAssetInspectorModSystem : ModSystem
     private sealed record RecipeReferenceCandidate(
         string Code,
         string DeclaredType
+    );
+
+    private sealed record RecipeAssetError(
+        string AssetLocation,
+        string ErrorType,
+        string Message
     );
 
     private sealed record ModDomainListReport(

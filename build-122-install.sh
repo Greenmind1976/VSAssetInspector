@@ -8,6 +8,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current 2>/dev/null || true)"
 TARGET_BRANCH="support/1.22"
+CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
+TARGET_HEAD="$(git -C "$ROOT_DIR" rev-parse "$TARGET_BRANCH" 2>/dev/null || true)"
 
 find_worktree_for_branch() {
   local branch_name="$1"
@@ -19,6 +21,9 @@ find_worktree_for_branch() {
 }
 
 if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
+  if [[ -n "$CURRENT_HEAD" && -n "$TARGET_HEAD" && "$CURRENT_HEAD" == "$TARGET_HEAD" ]]; then
+    echo "Current checkout already matches $TARGET_BRANCH at $CURRENT_HEAD"
+  else
   TARGET_WORKTREE="$(find_worktree_for_branch "$TARGET_BRANCH")"
 
   if [[ -z "$TARGET_WORKTREE" ]]; then
@@ -29,6 +34,7 @@ if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
   echo "Switching to $TARGET_BRANCH worktree:"
   echo "  $TARGET_WORKTREE"
   exec "$TARGET_WORKTREE/build-122-install.sh" "$@"
+  fi
 fi
 
 cd "$ROOT_DIR"

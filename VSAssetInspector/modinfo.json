@@ -6,8 +6,8 @@
   "authors": [
     "Greenmind"
   ],
-  "description": "Utility mod for exporting loaded Vintage Story item, block, and entity ids to disk.",
-  "version": "1.0.0",
+  "description": "Utility mod for exporting loaded Vintage Story item, block, and entity ids to disk and validating recipe references by domain.",
+  "version": "1.22.0",
   "dependencies": {
     "game": "1.22.0-rc.8"
   }

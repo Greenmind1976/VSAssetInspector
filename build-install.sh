@@ -5,13 +5,41 @@ set -euo pipefail
 # Build + Install VSAssetInspector into /Applications/Vintage Story.app/Mods
 ###############################################################################
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current 2>/dev/null || true)"
+TARGET_BRANCH="support/1.21"
+
+find_worktree_for_branch() {
+  local branch_name="$1"
+
+  git -C "$ROOT_DIR" worktree list --porcelain | awk -v target="refs/heads/$branch_name" '
+    $1 == "worktree" { wt = $2 }
+    $1 == "branch" && $2 == target { print wt; exit }
+  '
+}
+
+if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
+  TARGET_WORKTREE="$(find_worktree_for_branch "$TARGET_BRANCH")"
+
+  if [[ -z "$TARGET_WORKTREE" ]]; then
+    echo "ERROR: Could not find worktree for $TARGET_BRANCH" >&2
+    exit 1
+  fi
+
+  echo "Switching to $TARGET_BRANCH worktree:"
+  echo "  $TARGET_WORKTREE"
+  exec "$TARGET_WORKTREE/build-install.sh" "$@"
+fi
+
+cd "$ROOT_DIR"
+
 MOD_ID="vsassetinspector"
 PROJECT_DIR="VSAssetInspector"
 PROJECT_FILE="$PROJECT_DIR/VSAssetInspector.csproj"
 TARGET_FRAMEWORK="net8.0"
-MOD_BUILD_DIR="$PROJECT_DIR/bin/Debug/$TARGET_FRAMEWORK/Mods/mod"
 VS_APP_DIR="/Applications/Vintage Story.app"
 VS_MODS_DIR="$VS_APP_DIR/Mods"
+MOD_BUILD_DIR="$PROJECT_DIR/bin/Debug/$TARGET_FRAMEWORK/Mods/mod"
 
 rm -rf "$PROJECT_DIR/bin" "$PROJECT_DIR/obj"
 
@@ -49,6 +77,6 @@ fi
 echo "Installed '$MOD_ID' to:"
 echo "  $VS_MODS_DIR/$MOD_ID"
 
-if [[ -n "${VINTAGE_STORY:-}" ]]; then
-  open "$VINTAGE_STORY"
+if [[ -n "$VS_APP_DIR" ]]; then
+  open "$VS_APP_DIR"
 fi

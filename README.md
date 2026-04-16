@@ -11,10 +11,11 @@ It is designed for mod authors who want to answer questions like:
 
 ## What It Does
 
-The mod currently provides two main workflows:
+The mod currently provides three main workflows:
 
 1. Dump loaded runtime ids to JSON.
-2. Validate recipe references for a specific domain against the live game registries.
+2. List the loaded non-vanilla mod domains.
+3. Validate recipe references for a specific domain against the live game registries.
 
 Exports are written to the Vintage Story data path under `VSAssetInspector`.
 
@@ -43,6 +44,14 @@ This writes:
 - one JSON export per asset domain
 
 The dump is based on the live runtime registries, so it includes vanilla assets (`game:`) and loaded mod assets.
+
+### List loaded mod domains
+
+```text
+/assetinspect list moddomains
+```
+
+This writes a JSON file containing the currently loaded non-`game` domains and also prints the domains in chat for quick inspection.
 
 ### Validate recipes for a specific domain
 

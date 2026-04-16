@@ -1,0 +1,14 @@
+{
+  "$schema": "https://moddbcdn.vintagestory.at/schema/modinfo.latest.json",
+  "type": "Code",
+  "modid": "vsassetinspector",
+  "name": "VSAssetInspector",
+  "authors": [
+    "Greenmind"
+  ],
+  "description": "Utility mod for exporting loaded Vintage Story item, block, and entity ids to disk.",
+  "version": "1.0.0",
+  "dependencies": {
+    "game": "1.22.0-rc.8"
+  }
+}

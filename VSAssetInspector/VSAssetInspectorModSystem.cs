@@ -26,8 +26,8 @@ public class VSAssetInspectorModSystem : ModSystem
 #pragma warning disable CS0618
         api.RegisterCommand(
             CommandName,
-            "Dump loaded ids or validate recipe references by domain",
-            "/assetinspect dump ids [all|items|blocks|entities] | /assetinspect validate recipes <domain>",
+            "Dump loaded ids, list mod domains, or validate recipe references by domain",
+            "/assetinspect dump ids [all|items|blocks|entities] | /assetinspect list moddomains | /assetinspect validate recipes <domain>",
             OnAssetInspectCommand,
             Privilege.chat
         );
@@ -46,10 +46,13 @@ public class VSAssetInspectorModSystem : ModSystem
             case "validate":
                 HandleValidateCommand(byPlayer, groupId, args);
                 return;
+            case "list":
+                HandleListCommand(byPlayer, groupId, args);
+                return;
             default:
                 byPlayer.SendMessage(
                     groupId,
-                    "[AssetInspector] Usage: /assetinspect dump ids [all|items|blocks|entities] | /assetinspect validate recipes <domain>",
+                    "[AssetInspector] Usage: /assetinspect dump ids [all|items|blocks|entities] | /assetinspect list moddomains | /assetinspect validate recipes <domain>",
                     EnumChatType.CommandError
                 );
                 return;
@@ -135,6 +138,39 @@ public class VSAssetInspectorModSystem : ModSystem
             $"[AssetInspector] Validation report saved to: {outputPath}",
             EnumChatType.Notification
         );
+    }
+
+    private void HandleListCommand(IServerPlayer byPlayer, int groupId, CmdArgs args)
+    {
+        string subject = (args.PopWord() ?? string.Empty).ToLowerInvariant();
+
+        if (subject != "moddomains")
+        {
+            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect list moddomains", EnumChatType.CommandError);
+            return;
+        }
+
+        ICoreAPI api = byPlayer.Entity.Api;
+        List<string> domains = BuildModDomainList(api);
+        string outputDirectory = api.GetOrCreateDataPath(DataFolderName);
+        string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
+        string outputPath = Path.Combine(outputDirectory, $"assetinspect-moddomains-{timestamp}.json");
+        ModDomainListReport report = new(DateTime.UtcNow, domains.Count, domains);
+
+        Directory.CreateDirectory(outputDirectory);
+        File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions));
+
+        byPlayer.SendMessage(groupId, $"[AssetInspector] Found {domains.Count} loaded mod domains.", EnumChatType.Notification);
+
+        if (domains.Count > 0)
+        {
+            foreach (string chunk in ChunkStrings(domains, 12))
+            {
+                byPlayer.SendMessage(groupId, $"[AssetInspector] {chunk}", EnumChatType.Notification);
+            }
+        }
+
+        byPlayer.SendMessage(groupId, $"[AssetInspector] Mod domain list saved to: {outputPath}", EnumChatType.Notification);
     }
 
     private static AssetDump BuildDump(ICoreAPI api, string scope)
@@ -282,6 +318,31 @@ public class VSAssetInspectorModSystem : ModSystem
         }
 
         return new ValidationRegistry(itemCodes, blockCodes, entityCodes);
+    }
+
+    private static List<string> BuildModDomainList(ICoreAPI api)
+    {
+        HashSet<string> domains = new(StringComparer.Ordinal);
+
+        foreach (CollectibleObject collectible in api.World.Collectibles.Where(collectible => collectible is not null))
+        {
+            string? domain = collectible.Code?.Domain;
+            if (!string.IsNullOrWhiteSpace(domain) && !domain.Equals("game", StringComparison.OrdinalIgnoreCase))
+            {
+                domains.Add(domain);
+            }
+        }
+
+        foreach (var entityType in api.World.EntityTypes.Where(entityType => entityType is not null))
+        {
+            string? domain = entityType.Code?.Domain;
+            if (!string.IsNullOrWhiteSpace(domain) && !domain.Equals("game", StringComparison.OrdinalIgnoreCase))
+            {
+                domains.Add(domain);
+            }
+        }
+
+        return domains.OrderBy(domain => domain, StringComparer.Ordinal).ToList();
     }
 
     private static RecipeValidationReport ValidateRecipeAssets(ICoreAPI api, ValidationRegistry registry, string domain)
@@ -457,6 +518,14 @@ public class VSAssetInspectorModSystem : ModSystem
         return count;
     }
 
+    private static IEnumerable<string> ChunkStrings(List<string> values, int chunkSize)
+    {
+        for (int i = 0; i < values.Count; i += chunkSize)
+        {
+            yield return string.Join(", ", values.Skip(i).Take(chunkSize));
+        }
+    }
+
     private static DomainAssetDumpBuilder GetOrCreateBuilder(Dictionary<string, DomainAssetDumpBuilder> builders, string domain)
     {
         string key = string.IsNullOrWhiteSpace(domain) ? "unknown" : domain;
@@ -541,6 +610,12 @@ public class VSAssetInspectorModSystem : ModSystem
     private sealed record RecipeReferenceCandidate(
         string Code,
         string DeclaredType
+    );
+
+    private sealed record ModDomainListReport(
+        DateTime GeneratedAtUtc,
+        int DomainCount,
+        List<string> Domains
     );
 
     private sealed class DomainAssetDumpBuilder

@@ -1,4 +1,4 @@
-# VSAssetInspector 1.21.1
+# VSAssetInspector 1.21.2
 
 ## Highlights
 - Improved recipe validation so wildcard and `{variant}` template references resolve against live registries.

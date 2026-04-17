@@ -28,40 +28,133 @@ public class VSAssetInspectorModSystem : ModSystem
     {
         base.StartServerSide(api);
 
-#pragma warning disable CS0618
-        api.RegisterCommand(
-            CommandName,
-            "Dump loaded ids, list mod domains, or validate recipe references by domain",
-            "/assetinspect dump ids [all|items|blocks|entities] | /assetinspect list moddomains | /assetinspect validate recipes <domain>",
-            OnAssetInspectCommand,
-            Privilege.chat
-        );
-#pragma warning restore CS0618
+        api.ChatCommands
+            .GetOrCreate(CommandName)
+            .WithDescription("Dump loaded ids, list mod domains, or validate recipe references by domain")
+            .WithAdditionalInformation("Type /assetinspect help for a command overview. Dump exports loaded ids, list shows loaded mod domains, and validate checks recipe references for one domain or all domains with *.")
+            .WithRootAlias("/" + CommandName)
+            .WithExamples(new[]
+            {
+                "/assetinspect help",
+                "/assetinspect dumpids",
+                "/assetinspect dumpids all",
+                "/assetinspect dumpids items",
+                "/assetinspect dumpids blocks",
+                "/assetinspect dumpids entities",
+                "/assetinspect listmoddomains",
+                "/assetinspect validaterecipes game",
+                "/assetinspect validaterecipes *"
+            })
+            .RequiresPrivilege(Privilege.chat)
+            .BeginSubCommand("help")
+                .WithDescription("Show AssetInspector command help")
+                .WithExamples(new[]
+                {
+                    "/assetinspect help"
+                })
+                .HandleWith(HandleHelpChatCommand)
+            .EndSubCommand()
+            .BeginSubCommand("dumpids")
+                .WithDescription("Dump loaded ids")
+                .WithAdditionalInformation("Exports loaded ids to JSON. /assetinspect dumpids defaults to all. You can also choose items, blocks, or entities.")
+                .WithExamples(new[]
+                {
+                    "/assetinspect dumpids",
+                    "/assetinspect dumpids all",
+                    "/assetinspect dumpids items",
+                    "/assetinspect dumpids blocks",
+                    "/assetinspect dumpids entities"
+                })
+                .WithArgs(api.ChatCommands.Parsers.OptionalWordRange("scope", new[] { "all", "items", "blocks", "entities" }))
+                .HandleWith(HandleDumpIdsChatCommand)
+            .EndSubCommand()
+            .BeginSubCommand("validaterecipes")
+                .WithDescription("Validate recipe references by domain")
+                .WithAdditionalInformation("Validates recipe asset references for one loaded domain, or for all loaded domains with *. Run /assetinspect listmoddomains to see available domains.")
+                .WithExamples(new[]
+                {
+                    "/assetinspect validaterecipes game",
+                    "/assetinspect validaterecipes vsassetinspector",
+                    "/assetinspect validaterecipes *"
+                })
+                .WithArgs(api.ChatCommands.Parsers.OptionalWord("domain"))
+                .HandleWith(HandleValidateRecipesChatCommand)
+            .EndSubCommand()
+            .BeginSubCommand("listmoddomains")
+                .WithDescription("List loaded mod domains")
+                .WithAdditionalInformation("Lists loaded non-game mod domains and saves them to JSON.")
+                .WithExamples(new[]
+                {
+                    "/assetinspect listmoddomains"
+                })
+                .HandleWith(HandleListModDomainsChatCommand)
+            .EndSubCommand();
     }
 
-    private void OnAssetInspectCommand(IServerPlayer byPlayer, int groupId, CmdArgs args)
+    private TextCommandResult HandleHelpChatCommand(TextCommandCallingArgs args)
     {
-        string action = (args.PopWord() ?? string.Empty).ToLowerInvariant();
+        return TextCommandResult.Success(
+            "[AssetInspector] Commands:\n" +
+            "/assetinspect help - Show this help.\n" +
+            "/assetinspect dumpids - Export loaded ids to JSON. Defaults to all.\n" +
+            "/assetinspect dumpids all - Export all loaded ids to JSON.\n" +
+            "/assetinspect dumpids items, blocks, or entities - Export only that category to JSON.\n" +
+            "/assetinspect listmoddomains - List loaded mod domains and save them to JSON.\n" +
+            "/assetinspect validaterecipes <domain> - Validate recipe references for one loaded domain.\n" +
+            "/assetinspect validaterecipes * - Validate recipe references for all loaded domains plus game.\n" +
+            "If you need a domain name, run /assetinspect listmoddomains first.\n" +
+            "Tip: if a bare subcommand chip only inserts plain text, use the full slash-prefixed examples shown in the command help.",
+            null
+        );
+    }
 
-        switch (action)
+    private TextCommandResult HandleDumpIdsChatCommand(TextCommandCallingArgs args)
+    {
+        string scope = args.ArgCount > 0 && args[0] is string argScope && !string.IsNullOrWhiteSpace(argScope)
+            ? argScope.ToLowerInvariant()
+            : "all";
+
+        IServerPlayer? byPlayer = args.Caller.Player as IServerPlayer;
+        if (byPlayer == null)
         {
-            case "dump":
-                HandleDumpCommand(byPlayer, groupId, args);
-                return;
-            case "validate":
-                HandleValidateCommand(byPlayer, groupId, args);
-                return;
-            case "list":
-                HandleListCommand(byPlayer, groupId, args);
-                return;
-            default:
-                byPlayer.SendMessage(
-                    groupId,
-                    "[AssetInspector] Usage: /assetinspect dump ids [all|items|blocks|entities] | /assetinspect list moddomains | /assetinspect validate recipes <domain>",
-                    EnumChatType.CommandError
-                );
-                return;
+            return TextCommandResult.Error("This command requires a player context.");
         }
+
+        HandleDumpCommand(byPlayer, GlobalConstants.CurrentChatGroup, new CmdArgs($"ids {scope}"));
+        return TextCommandResult.Success(string.Empty, null);
+    }
+
+    private TextCommandResult HandleValidateRecipesChatCommand(TextCommandCallingArgs args)
+    {
+        string domain = args.ArgCount > 0 && args[0] is string argDomain
+            ? argDomain
+            : string.Empty;
+
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            return TextCommandResult.Error("[AssetInspector] You must specify a domain, or use * for all loaded domains. Run /assetinspect listmoddomains to see available domains.");
+        }
+
+        IServerPlayer? byPlayer = args.Caller.Player as IServerPlayer;
+        if (byPlayer == null)
+        {
+            return TextCommandResult.Error("This command requires a player context.");
+        }
+
+        HandleValidateCommand(byPlayer, GlobalConstants.CurrentChatGroup, new CmdArgs($"recipes {domain}"));
+        return TextCommandResult.Success(string.Empty, null);
+    }
+
+    private TextCommandResult HandleListModDomainsChatCommand(TextCommandCallingArgs args)
+    {
+        IServerPlayer? byPlayer = args.Caller.Player as IServerPlayer;
+        if (byPlayer == null)
+        {
+            return TextCommandResult.Error("This command requires a player context.");
+        }
+
+        HandleListCommand(byPlayer, GlobalConstants.CurrentChatGroup, new CmdArgs("moddomains"));
+        return TextCommandResult.Success(string.Empty, null);
     }
 
     private void HandleDumpCommand(IServerPlayer byPlayer, int groupId, CmdArgs args)
@@ -71,7 +164,7 @@ public class VSAssetInspectorModSystem : ModSystem
 
         if (subject != "ids")
         {
-            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect dump ids [all|items|blocks|entities]", EnumChatType.CommandError);
+            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect dumpids [scope]. Scope defaults to all. Options: all, items, blocks, entities.", EnumChatType.CommandError);
             return;
         }
 
@@ -82,6 +175,7 @@ public class VSAssetInspectorModSystem : ModSystem
         }
 
         ICoreAPI api = byPlayer.Entity.Api;
+        byPlayer.SendMessage(groupId, $"[AssetInspector] Gathering {scope} ids. This may take a moment...", EnumChatType.Notification);
         AssetDump dump = BuildDump(api, scope);
         string outputDirectory = api.GetOrCreateDataPath(DataFolderName);
         string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
@@ -118,25 +212,55 @@ public class VSAssetInspectorModSystem : ModSystem
 
         if (subject != "recipes" || string.IsNullOrWhiteSpace(domain))
         {
-            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect validate recipes <domain>", EnumChatType.CommandError);
+            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect validaterecipes <domain|*>", EnumChatType.CommandError);
             return;
         }
 
         ICoreAPI api = byPlayer.Entity.Api;
+        bool validateAllDomains = domain == "*";
+        string targetDescription = validateAllDomains ? "all loaded domains plus game" : $"domain {domain}";
+        byPlayer.SendMessage(
+            groupId,
+            $"[AssetInspector] Starting recipe validation for {targetDescription}. Large domains may take a while.",
+            EnumChatType.Notification
+        );
         ValidationRegistry registry = BuildValidationRegistry(api);
-        RecipeValidationReport report = ValidateRecipeAssets(api, registry, domain);
+        RecipeValidationReport report = validateAllDomains
+            ? ValidateRecipeAssetsForAllDomains(api, registry)
+            : ValidateRecipeAssets(api, registry, domain);
         string outputDirectory = api.GetOrCreateDataPath(DataFolderName);
         string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
-        string outputPath = Path.Combine(outputDirectory, $"assetinspect-validate-recipes-{domain}-{timestamp}.json");
+        string outputPath = Path.Combine(
+            outputDirectory,
+            $"assetinspect-validate-recipes-{(validateAllDomains ? "all" : domain)}-{timestamp}.json"
+        );
 
         Directory.CreateDirectory(outputDirectory);
         File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions));
 
         byPlayer.SendMessage(
             groupId,
-            $"[AssetInspector] Validated {report.AssetCount} recipe assets for domain {domain}. Unresolved references: {report.UnresolvedCount}. Asset errors: {report.AssetErrorCount}.",
+            $"[AssetInspector] Validated {report.AssetCount} recipe assets for {targetDescription}. Unresolved references: {report.UnresolvedCount}. Asset errors: {report.AssetErrorCount}.",
             EnumChatType.Notification
         );
+
+        if (validateAllDomains && report.DomainSummaries.Count > 0)
+        {
+            byPlayer.SendMessage(
+                groupId,
+                "[AssetInspector] Per-domain summary:",
+                EnumChatType.Notification
+            );
+
+            foreach (RecipeValidationDomainSummary summary in report.DomainSummaries.OrderBy(summary => summary.Domain, StringComparer.Ordinal))
+            {
+                byPlayer.SendMessage(
+                    groupId,
+                    $"[AssetInspector] {summary.Domain}: {summary.AssetCount} assets, {summary.TotalReferences} references, {summary.UnresolvedCount} unresolved, {summary.AssetErrorCount} errors.",
+                    EnumChatType.Notification
+                );
+            }
+        }
 
         byPlayer.SendMessage(
             groupId,
@@ -147,15 +271,16 @@ public class VSAssetInspectorModSystem : ModSystem
 
     private void HandleListCommand(IServerPlayer byPlayer, int groupId, CmdArgs args)
     {
-        string subject = (args.PopWord() ?? string.Empty).ToLowerInvariant();
+        string subject = (args.PopWord() ?? "moddomains").ToLowerInvariant();
 
         if (subject != "moddomains")
         {
-            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect list moddomains", EnumChatType.CommandError);
+            byPlayer.SendMessage(groupId, "[AssetInspector] Usage: /assetinspect listmoddomains", EnumChatType.CommandError);
             return;
         }
 
         ICoreAPI api = byPlayer.Entity.Api;
+        byPlayer.SendMessage(groupId, "[AssetInspector] Gathering loaded mod domains...", EnumChatType.Notification);
         List<string> domains = BuildModDomainList(api);
         string outputDirectory = api.GetOrCreateDataPath(DataFolderName);
         string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
@@ -404,6 +529,45 @@ public class VSAssetInspectorModSystem : ModSystem
             totalReferences,
             unresolvedCount,
             assetErrors.Count,
+            new List<RecipeValidationDomainSummary>
+            {
+                new(
+                    domain,
+                    assets.Count,
+                    totalReferences,
+                    unresolvedCount,
+                    assetErrors.Count
+                )
+            },
+            assets.OrderBy(asset => asset.AssetLocation, StringComparer.Ordinal).ToList(),
+            assetErrors.OrderBy(error => error.AssetLocation, StringComparer.Ordinal).ToList()
+        );
+    }
+
+    private static RecipeValidationReport ValidateRecipeAssetsForAllDomains(ICoreAPI api, ValidationRegistry registry)
+    {
+        List<RecipeAssetValidation> assets = new();
+        List<RecipeAssetError> assetErrors = new();
+        List<RecipeValidationDomainSummary> domainSummaries = new();
+        List<string> domains = new() { "game" };
+        domains.AddRange(BuildModDomainList(api));
+
+        foreach (string domain in domains.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            RecipeValidationReport report = ValidateRecipeAssets(api, registry, domain);
+            assets.AddRange(report.Assets);
+            assetErrors.AddRange(report.AssetErrors);
+            domainSummaries.AddRange(report.DomainSummaries);
+        }
+
+        return new RecipeValidationReport(
+            DateTime.UtcNow,
+            "*",
+            assets.Count,
+            assets.Sum(asset => asset.ReferenceCount),
+            assets.Sum(asset => asset.UnresolvedCount),
+            assetErrors.Count,
+            domainSummaries.OrderBy(summary => summary.Domain, StringComparer.Ordinal).ToList(),
             assets.OrderBy(asset => asset.AssetLocation, StringComparer.Ordinal).ToList(),
             assetErrors.OrderBy(error => error.AssetLocation, StringComparer.Ordinal).ToList()
         );
@@ -689,8 +853,17 @@ public class VSAssetInspectorModSystem : ModSystem
         int TotalReferences,
         int UnresolvedCount,
         int AssetErrorCount,
+        List<RecipeValidationDomainSummary> DomainSummaries,
         List<RecipeAssetValidation> Assets,
         List<RecipeAssetError> AssetErrors
+    );
+
+    private sealed record RecipeValidationDomainSummary(
+        string Domain,
+        int AssetCount,
+        int TotalReferences,
+        int UnresolvedCount,
+        int AssetErrorCount
     );
 
     private sealed record RecipeAssetValidation(

@@ -1,4 +1,6 @@
-# VSAssetInspector 1.0.0
+# VSAssetInspector 1.21.1
 
 ## Highlights
-- Initial runtime asset export command.
+- Improved recipe validation so wildcard and `{variant}` template references resolve against live registries.
+- Reduced false positives for split and single-domain mods such as VSMineralMasonry.
+- Hardened install scripts to remove stale duplicate mod folders before copying a new build.

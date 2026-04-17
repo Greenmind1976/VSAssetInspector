@@ -471,17 +471,24 @@ public class VSAssetInspectorModSystem : ModSystem
     {
         HashSet<string> pool = GetPoolForCandidate(candidate, registry);
         string resolutionScope = candidate.DeclaredType;
+        bool containsWildcard = candidate.Code.Contains('*');
+        bool containsTemplate = ContainsTemplateToken(candidate.Code);
 
-        if (candidate.Code.Contains('*'))
+        if (containsWildcard || containsTemplate)
         {
-            int matchCount = CountWildcardMatches(candidate.Code, pool);
+            int matchCount = CountPatternMatches(candidate.Code, pool);
+            string resolutionKind = matchCount > 0
+                ? GetPatternResolutionKind(containsWildcard, containsTemplate)
+                : GetMissingPatternResolutionKind(containsWildcard, containsTemplate);
+
             return new RecipeReferenceValidation(
                 candidate.Code,
                 candidate.DeclaredType,
                 matchCount > 0,
-                true,
+                containsWildcard,
+                containsTemplate,
                 matchCount,
-                matchCount > 0 ? "wildcard-match" : "wildcard-no-match",
+                resolutionKind,
                 resolutionScope
             );
         }
@@ -491,6 +498,7 @@ public class VSAssetInspectorModSystem : ModSystem
             candidate.Code,
             candidate.DeclaredType,
             isResolved,
+            false,
             false,
             isResolved ? 1 : 0,
             isResolved ? "exact-match" : "missing",
@@ -520,9 +528,9 @@ public class VSAssetInspectorModSystem : ModSystem
         };
     }
 
-    private static int CountWildcardMatches(string pattern, IEnumerable<string> pool)
+    private static int CountPatternMatches(string pattern, IEnumerable<string> pool)
     {
-        string regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", "[^:]*") + "$";
+        string regexPattern = BuildPatternRegex(pattern);
         System.Text.RegularExpressions.Regex regex = new(regexPattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant);
         int count = 0;
 
@@ -535,6 +543,80 @@ public class VSAssetInspectorModSystem : ModSystem
         }
 
         return count;
+    }
+
+    private static bool ContainsTemplateToken(string code)
+    {
+        int openBrace = code.IndexOf('{');
+        if (openBrace < 0)
+        {
+            return false;
+        }
+
+        int closeBrace = code.IndexOf('}', openBrace + 1);
+        return closeBrace > openBrace + 1;
+    }
+
+    private static string GetPatternResolutionKind(bool containsWildcard, bool containsTemplate)
+    {
+        if (containsWildcard && containsTemplate)
+        {
+            return "wildcard-template-match";
+        }
+
+        if (containsTemplate)
+        {
+            return "template-match";
+        }
+
+        return "wildcard-match";
+    }
+
+    private static string GetMissingPatternResolutionKind(bool containsWildcard, bool containsTemplate)
+    {
+        if (containsWildcard && containsTemplate)
+        {
+            return "wildcard-template-no-match";
+        }
+
+        if (containsTemplate)
+        {
+            return "template-no-match";
+        }
+
+        return "wildcard-no-match";
+    }
+
+    private static string BuildPatternRegex(string pattern)
+    {
+        StringBuilder regexBuilder = new("^");
+
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            char current = pattern[i];
+
+            if (current == '*')
+            {
+                regexBuilder.Append("[^:]*");
+                continue;
+            }
+
+            if (current == '{')
+            {
+                int closingBrace = pattern.IndexOf('}', i + 1);
+                if (closingBrace > i + 1)
+                {
+                    regexBuilder.Append("[^:]+");
+                    i = closingBrace;
+                    continue;
+                }
+            }
+
+            regexBuilder.Append(System.Text.RegularExpressions.Regex.Escape(current.ToString()));
+        }
+
+        regexBuilder.Append('$');
+        return regexBuilder.ToString();
     }
 
     private static IEnumerable<string> ChunkStrings(List<string> values, int chunkSize)
@@ -623,6 +705,7 @@ public class VSAssetInspectorModSystem : ModSystem
         string DeclaredType,
         bool IsResolved,
         bool IsWildcard,
+        bool IsTemplate,
         int MatchCount,
         string ResolutionKind,
         string ResolutionScope

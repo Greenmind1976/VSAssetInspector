@@ -7,7 +7,7 @@
     "Greenmind"
   ],
   "description": "Utility mod for exporting loaded Vintage Story item, block, and entity ids to disk and validating recipe references by domain.",
-  "version": "1.22.0",
+  "version": "1.22.1",
   "dependencies": {
     "game": "1.22.0-rc.8"
   }

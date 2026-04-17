@@ -59,19 +59,26 @@ This writes a JSON file containing the currently loaded non-`game` domains and a
 /assetinspect validate recipes vsdemolitionist
 ```
 
-This scans recipe assets for the requested domain and writes a validation report showing:
+This command scans recipe assets for the requested domain and validates the references they use against the live runtime registries. It is intended to help find broken recipe references, wildcard mistakes, variant-template mismatches, item-vs-block mismatches, and cross-version asset issues.
+
+The validation report shows:
 
 - resolved references
 - unresolved references
 - wildcard matches
+- template matches such as `{rock}` or `{metal}`
 - declared reference type
 - resolution scope and match count
 
-The validator is type-aware:
+The validator is wildcard-aware, template-aware, and type-aware:
 
 - `item` references are checked against runtime items
 - `block` references are checked against runtime blocks
 - `entity` references are checked against runtime entities
+- `*` wildcard patterns are matched against the live registry
+- `{variant}` placeholder patterns are matched against the live registry
+
+If a recipe asset cannot be parsed cleanly, the validator continues processing the rest of the domain and records the asset-level failure in the report instead of aborting the whole run.
 
 ## Output
 
@@ -89,7 +96,7 @@ assetinspect-ids-all-game-20260416-192740-123.json
 assetinspect-validate-recipes-vsdemolitionist-20260416-200046-960.json
 ```
 
-When a command completes, the mod sends a chat message showing whether the export succeeded and where the file was saved.
+When a command completes, the mod sends chat messages showing whether the export or validation succeeded and where the file was saved.
 
 ## Supported Branches
 

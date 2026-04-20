@@ -2,12 +2,14 @@
 set -euo pipefail
 
 ###############################################################################
-# Build + Install VSAssetInspector into /Applications/Vintage Story.app/Mods
+# Build + Install VSAssetInspector into Vintage Story 1.21.7
 ###############################################################################
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_BRANCH="$(git -C "$ROOT_DIR" branch --show-current 2>/dev/null || true)"
 TARGET_BRANCH="support/1.21"
+CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
+TARGET_HEAD="$(git -C "$ROOT_DIR" rev-parse "$TARGET_BRANCH" 2>/dev/null || true)"
 
 find_worktree_for_branch() {
   local branch_name="$1"
@@ -19,16 +21,20 @@ find_worktree_for_branch() {
 }
 
 if [[ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]]; then
-  TARGET_WORKTREE="$(find_worktree_for_branch "$TARGET_BRANCH")"
+  if [[ -n "$CURRENT_HEAD" && -n "$TARGET_HEAD" && "$CURRENT_HEAD" == "$TARGET_HEAD" ]]; then
+    echo "Current checkout already matches $TARGET_BRANCH at $CURRENT_HEAD"
+  else
+    TARGET_WORKTREE="$(find_worktree_for_branch "$TARGET_BRANCH")"
 
-  if [[ -z "$TARGET_WORKTREE" ]]; then
-    echo "ERROR: Could not find worktree for $TARGET_BRANCH" >&2
-    exit 1
+    if [[ -z "$TARGET_WORKTREE" ]]; then
+      echo "ERROR: Could not find worktree for $TARGET_BRANCH" >&2
+      exit 1
+    fi
+
+    echo "Switching to $TARGET_BRANCH worktree:"
+    echo "  $TARGET_WORKTREE"
+    exec "$TARGET_WORKTREE/build-install.sh" "$@"
   fi
-
-  echo "Switching to $TARGET_BRANCH worktree:"
-  echo "  $TARGET_WORKTREE"
-  exec "$TARGET_WORKTREE/build-install.sh" "$@"
 fi
 
 cd "$ROOT_DIR"
@@ -37,19 +43,18 @@ MOD_ID="vsassetinspector"
 PROJECT_DIR="VSAssetInspector"
 PROJECT_FILE="$PROJECT_DIR/VSAssetInspector.csproj"
 TARGET_FRAMEWORK="net8.0"
-VS_APP_DIR="/Applications/Vintage Story.app"
+VS_APP_DIR="/Applications/Vintage Story 1.21.7.app"
 VS_MODS_DIR="$VS_APP_DIR/Mods"
+VS_EXECUTABLE="$VS_APP_DIR/Vintagestory"
+VS_DATA_PATH="$HOME/Library/Application Support/VintagestoryData-1.21.7"
 MOD_BUILD_DIR="$PROJECT_DIR/bin/Debug/$TARGET_FRAMEWORK/Mods/mod"
+LEGACY_MOD_DIRS=(
+  "$VS_MODS_DIR/$MOD_ID"
+  "$VS_MODS_DIR/$MOD_ID-1.21.0"
+  "$VS_MODS_DIR/$MOD_ID-1.22.0"
+)
 
 rm -rf "$PROJECT_DIR/bin" "$PROJECT_DIR/obj"
-
-echo "Deleting installed mod dir: $VS_MODS_DIR/$MOD_ID"
-rm -rf "$VS_MODS_DIR/$MOD_ID"
-
-if [[ -e "$VS_MODS_DIR/$MOD_ID" ]]; then
-  echo "ERROR: Mod dir still exists: $VS_MODS_DIR/$MOD_ID" >&2
-  exit 1
-fi
 
 if [[ ! -d "$VS_APP_DIR" ]]; then
   echo "ERROR: Vintage Story app not found: $VS_APP_DIR" >&2
@@ -66,17 +71,41 @@ fi
 if [[ ! -w "$VS_MODS_DIR" ]]; then
   echo "Mods folder not writable, using sudo..."
   sudo mkdir -p "$VS_MODS_DIR"
-  sudo rm -rf "$VS_MODS_DIR/$MOD_ID"
+  for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+    echo "Deleting installed mod dir: $mod_dir"
+    sudo rm -rf "$mod_dir"
+  done
   sudo cp -R "$MOD_BUILD_DIR" "$VS_MODS_DIR/$MOD_ID"
 else
   mkdir -p "$VS_MODS_DIR"
-  rm -rf "$VS_MODS_DIR/$MOD_ID"
+  for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+    echo "Deleting installed mod dir: $mod_dir"
+    rm -rf "$mod_dir"
+  done
   cp -R "$MOD_BUILD_DIR" "$VS_MODS_DIR/$MOD_ID"
 fi
+
+for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+  if [[ "$mod_dir" != "$VS_MODS_DIR/$MOD_ID" && -e "$mod_dir" ]]; then
+    echo "ERROR: Legacy mod dir still exists: $mod_dir" >&2
+    exit 1
+  fi
+done
 
 echo "Installed '$MOD_ID' to:"
 echo "  $VS_MODS_DIR/$MOD_ID"
 
-if [[ -n "$VS_APP_DIR" ]]; then
-  open "$VS_APP_DIR"
+if [[ ! -x "$VS_EXECUTABLE" ]]; then
+  echo
+  echo "Vintage Story 1.21.7 executable not found at: $VS_EXECUTABLE"
+  echo "Check that the app bundle contains the Vintagestory executable."
+  exit 0
 fi
+
+echo
+echo "Launching Vintage Story 1.21.7 via:"
+echo "  $VS_EXECUTABLE"
+echo "Using data path:"
+echo "  $VS_DATA_PATH"
+mkdir -p "$VS_DATA_PATH"
+"$VS_EXECUTABLE" --dataPath "$VS_DATA_PATH" >/dev/null 2>&1 &

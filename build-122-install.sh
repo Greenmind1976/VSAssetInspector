@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ###############################################################################
-# Build + Install VSAssetInspector into Vintage Story 1.22.0-rc.8
+# Build + Install VSAssetInspector into Vintage Story 1.22
 ###############################################################################
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,19 +44,16 @@ PROJECT_DIR="VSAssetInspector"
 PROJECT_FILE="$PROJECT_DIR/VSAssetInspector.csproj"
 TARGET_FRAMEWORK="net10.0"
 MOD_BUILD_DIR="$PROJECT_DIR/bin/Debug/$TARGET_FRAMEWORK/Mods/mod"
-VS_APP_DIR="/Applications/Vintage Story 1.22.0-rc.8.app"
+VS_APP_DIR="/Applications/Vintage Story 1.22.app"
 VS_MODS_DIR="$VS_APP_DIR/Mods"
-VS_LAUNCHER="$HOME/bin/vs-1.22.0-rc.8"
+VS_LAUNCHER="$HOME/bin/vs-1.22"
+LEGACY_MOD_DIRS=(
+  "$VS_MODS_DIR/$MOD_ID"
+  "$VS_MODS_DIR/$MOD_ID-1.21.0"
+  "$VS_MODS_DIR/$MOD_ID-1.22.0"
+)
 
 rm -rf "$PROJECT_DIR/bin" "$PROJECT_DIR/obj"
-
-echo "Deleting installed mod dir: $VS_MODS_DIR/$MOD_ID"
-rm -rf "$VS_MODS_DIR/$MOD_ID"
-
-if [[ -e "$VS_MODS_DIR/$MOD_ID" ]]; then
-  echo "ERROR: Mod dir still exists: $VS_MODS_DIR/$MOD_ID" >&2
-  exit 1
-fi
 
 if [[ ! -d "$VS_APP_DIR" ]]; then
   echo "ERROR: Vintage Story app not found: $VS_APP_DIR" >&2
@@ -73,25 +70,38 @@ fi
 if [[ ! -w "$VS_MODS_DIR" ]]; then
   echo "Mods folder not writable, using sudo..."
   sudo mkdir -p "$VS_MODS_DIR"
-  sudo rm -rf "$VS_MODS_DIR/$MOD_ID"
+  for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+    echo "Deleting installed mod dir: $mod_dir"
+    sudo rm -rf "$mod_dir"
+  done
   sudo cp -R "$MOD_BUILD_DIR" "$VS_MODS_DIR/$MOD_ID"
 else
   mkdir -p "$VS_MODS_DIR"
-  rm -rf "$VS_MODS_DIR/$MOD_ID"
+  for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+    echo "Deleting installed mod dir: $mod_dir"
+    rm -rf "$mod_dir"
+  done
   cp -R "$MOD_BUILD_DIR" "$VS_MODS_DIR/$MOD_ID"
 fi
+
+for mod_dir in "${LEGACY_MOD_DIRS[@]}"; do
+  if [[ "$mod_dir" != "$VS_MODS_DIR/$MOD_ID" && -e "$mod_dir" ]]; then
+    echo "ERROR: Legacy mod dir still exists: $mod_dir" >&2
+    exit 1
+  fi
+done
 
 echo "Installed '$MOD_ID' to:"
 echo "  $VS_MODS_DIR/$MOD_ID"
 
 if [[ ! -x "$VS_LAUNCHER" ]]; then
   echo
-  echo "RC launcher not found at: $VS_LAUNCHER"
-  echo "Use ~/bin/vs-1.22.0-rc.8 to start it with the local x64 .NET runtime once it exists."
+  echo "1.22 launcher not found at: $VS_LAUNCHER"
+  echo "Use ~/bin/vs-1.22 to start it with the configured launcher once it exists."
   exit 0
 fi
 
 echo
-echo "Launching Vintage Story 1.22.0-rc.8 via:"
+echo "Launching Vintage Story 1.22 via:"
 echo "  $VS_LAUNCHER"
 "$VS_LAUNCHER" >/dev/null 2>&1 &

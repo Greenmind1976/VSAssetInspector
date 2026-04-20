@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ###############################################################################
-# Build + Install VSAssetInspector into /Applications/Vintage Story.app/Mods
+# Build + Install VSAssetInspector into Vintage Story 1.21.7
 ###############################################################################
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,8 +43,10 @@ MOD_ID="vsassetinspector"
 PROJECT_DIR="VSAssetInspector"
 PROJECT_FILE="$PROJECT_DIR/VSAssetInspector.csproj"
 TARGET_FRAMEWORK="net8.0"
-VS_APP_DIR="/Applications/Vintage Story.app"
+VS_APP_DIR="/Applications/Vintage Story 1.21.7.app"
 VS_MODS_DIR="$VS_APP_DIR/Mods"
+VS_EXECUTABLE="$VS_APP_DIR/Vintagestory"
+VS_DATA_PATH="$HOME/Library/Application Support/VintagestoryData-1.21.7"
 MOD_BUILD_DIR="$PROJECT_DIR/bin/Debug/$TARGET_FRAMEWORK/Mods/mod"
 LEGACY_MOD_DIRS=(
   "$VS_MODS_DIR/$MOD_ID"
@@ -93,6 +95,17 @@ done
 echo "Installed '$MOD_ID' to:"
 echo "  $VS_MODS_DIR/$MOD_ID"
 
-if [[ -n "$VS_APP_DIR" ]]; then
-  open "$VS_APP_DIR"
+if [[ ! -x "$VS_EXECUTABLE" ]]; then
+  echo
+  echo "Vintage Story 1.21.7 executable not found at: $VS_EXECUTABLE"
+  echo "Check that the app bundle contains the Vintagestory executable."
+  exit 0
 fi
+
+echo
+echo "Launching Vintage Story 1.21.7 via:"
+echo "  $VS_EXECUTABLE"
+echo "Using data path:"
+echo "  $VS_DATA_PATH"
+mkdir -p "$VS_DATA_PATH"
+"$VS_EXECUTABLE" --dataPath "$VS_DATA_PATH" >/dev/null 2>&1 &

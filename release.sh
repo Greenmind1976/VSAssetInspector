@@ -6,7 +6,7 @@ PROJECT_PATH="$ROOT_DIR/VSAssetInspector/VSAssetInspector.csproj"
 MOD_OUTPUT_DIR="$ROOT_DIR/VSAssetInspector/bin/Release/net10.0/Mods/mod"
 VERSION_FILE="$ROOT_DIR/VERSION"
 DIST_DIR="$ROOT_DIR/dist"
-VS_APP_DIR="/Applications/Vintage Story 1.22.0-rc.8.app"
+VS_APP_DIR="/Applications/Vintage Story 1.22.app"
 
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "dotnet is not installed or not on PATH." >&2
